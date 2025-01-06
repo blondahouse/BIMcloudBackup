@@ -2,6 +2,7 @@ import argparse
 import sys
 import io
 from utils.logger import setup_logger
+from utils.file_utils import set_logger
 from backup_manager import BackupManager
 
 # Ensure proper handling of Unicode in the command-line interface
@@ -10,9 +11,6 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 
 def main():
-    # Set up logging
-    logger = setup_logger("backup_manager", "backup_manager.log")
-
     # Argument parsing
     parser = argparse.ArgumentParser(description="BIMcloud Backup Script")
     parser.add_argument('-m', '--manager_url', required=True, help='URL of the BIMcloud Manager')
@@ -22,8 +20,15 @@ def main():
     parser.add_argument('-t', '--task', required=True, choices=['all', 'edited', 'selected'], help='Backup task type')
     parser.add_argument('-prj', '--project_path', help='Optional: Path to a specific project to back up (for selected task)')
     parser.add_argument('-tgt', '--target_root', required=True, help='Target root directory for copying backup files')
+    parser.add_argument('-ext', '--file_extension', required=True, help='Backup files extension')
 
     args = parser.parse_args()
+
+    # Set up logging
+    logger = setup_logger("backup_manager", f'{args.client_id}.log')
+
+    # Configure file_utils logger
+    set_logger(args.client_id)
 
     # Instantiate BackupManager with parsed arguments
     try:
@@ -34,7 +39,8 @@ def main():
             password=args.password,
             task=args.task,
             project_path=args.project_path,
-            target_root=args.target_root
+            target_root=args.target_root,
+            file_extension = args.file_extension
         )
 
         # Run the backup task

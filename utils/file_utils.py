@@ -3,8 +3,11 @@ from pathlib import Path
 from utils.logger import setup_logger
 from datetime import datetime, timezone
 
-# Initialize the logger for the file_utils module
-logger = setup_logger("file_utils", "backup_manager.log")
+logger = None  # Placeholder for the logger
+
+def set_logger(client_id):
+    global logger
+    logger = setup_logger("backup_manager", f'{client_id}.log')
 
 
 def copy_latest_file_by_extension(source_dir, target_dir, file_extension):

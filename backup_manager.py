@@ -9,12 +9,11 @@ from utils.file_utils import copy_file, check_file_update
 # Define constants
 BACKUP_FOLDER = 'Backups'
 BACKUP_FILE_EXTENSION = '.archive'
-PROJECT_FILE_EXTENSION = '.BIMProject26'
 PROJECT_ROOT = 'Project Root'
 
 
 class BackupManager:
-    def __init__(self, manager_url, username, password, client_id, task, project_path=None, target_root=None):
+    def __init__(self, manager_url, username, password, client_id, task, project_path=None, target_root=None, file_extension=None):
         self.manager_url = manager_url
         self.username = username
         self.password = password
@@ -22,9 +21,10 @@ class BackupManager:
         self.task = task
         self.project_path = project_path
         self.target_root = target_root
+        self.file_extension = file_extension
 
         # Set up logger
-        self.logger = setup_logger("backup_manager", "backup_manager.log")
+        self.logger = setup_logger("backup_manager", f'{self.client_id}.log')
         self.logger.info("Initializing Backup Manager")
 
         # Initialize API connection
@@ -141,7 +141,7 @@ class BackupManager:
         source = (Path(PureWindowsPath(project['$pathOnServer']))
                   / BACKUP_FOLDER / backup_filename)
         relative_path = PureWindowsPath(project['$path'][len(PROJECT_ROOT) + 1:])
-        target = Path(self.target_root) / relative_path.with_suffix(PROJECT_FILE_EXTENSION)
+        target = Path(self.target_root) / relative_path.with_suffix(self.file_extension)
         return source, target
 
     def delete_resource_backup_by_name(self, resource_id, backup_name):
