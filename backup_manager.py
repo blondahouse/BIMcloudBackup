@@ -4,7 +4,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from bimcloud_custom.custom_managerapi import CustomManagerApi
-from utils.file_utils import copy_file, check_file_update
+from utils.file_utils import copy_file, check_file_update, upload_file_to_gdrive, check_gdrive_file_update
+from utils.gdrive import GoogleDriveAPI
 
 # Define constants
 BACKUP_FOLDER = 'Backups'
@@ -13,7 +14,20 @@ PROJECT_ROOT = 'Project Root'
 
 
 class BackupManager:
-    def __init__(self, manager_url, username, password, client_id, task, project_path=None, target_root=None, file_extension=None):
+    def __init__(
+            self,
+            manager_url,
+            username,
+            password,
+            client_id,
+            task,
+            project_path=None,
+            target_root=None,
+            gdrive_root=None,
+            gdrive_api=None,
+            file_extension=None
+    ):
+
         self.manager_url = manager_url
         self.username = username
         self.password = password
@@ -21,6 +35,8 @@ class BackupManager:
         self.task = task
         self.project_path = project_path
         self.target_root = target_root
+        self.gdrive_root = gdrive_root
+        self.gdrive_api = gdrive_api if gdrive_api else GoogleDriveAPI('credentials.json', 'token.json')
         self.file_extension = file_extension
 
         # Set up logger
@@ -95,14 +111,33 @@ class BackupManager:
             resource_id, backup_name, backup_filename = self.create_bimproject_backup(project)
 
             # Get source and target paths
-            source, target = self.get_backup_file_paths(project, backup_filename)
+            # source, target = self.get_backup_file_paths(project, backup_filename)
 
             # Copy the backup file
-            copy_file(source, target)
+            # copy_file(source, target)
 
             # Verify the backup file
-            if not check_file_update(target):
-                self.logger.warning(f"Backup verification failed for project '{project_name}'.")
+            # if not check_file_update(target):
+            #     self.logger.warning(f"Backup verification failed for project '{project_name}'.")
+
+            # Get source and gdrive relative target paths
+            source, target = self.get_backup_file_paths_gdrive(project, backup_filename)
+
+            # Upload to GDrive
+            upload_file_to_gdrive(source, self.gdrive_root, target, self.gdrive_api)
+
+            # Verify the backup file on Google Drive
+            folder_id = self.gdrive_api.get_or_create_folder(str(target.parent), self.gdrive_root)
+            is_uploaded = check_gdrive_file_update(
+                drive_api=self.gdrive_api,
+                folder_id=folder_id,
+                local_file_path=Path(source),
+                drive_filename=target.name
+            )
+            if not is_uploaded:
+                self.logger.warning(
+                    f"Backup verification failed for project '{project_name}'. Not deleting from BIMcloud.")
+                return
 
             # Delete the backup
             self.delete_resource_backup_by_name(resource_id, backup_name)
@@ -142,6 +177,13 @@ class BackupManager:
                   / BACKUP_FOLDER / backup_filename)
         relative_path = PureWindowsPath(project['$path'][len(PROJECT_ROOT) + 1:])
         target = Path(self.target_root) / relative_path.with_suffix(self.file_extension)
+        return source, target
+
+    def get_backup_file_paths_gdrive(self, project, backup_filename):
+        source = (Path(PureWindowsPath(project['$pathOnServer']))
+                  / BACKUP_FOLDER / backup_filename)
+        relative_path = PureWindowsPath(project['$path'][len(PROJECT_ROOT) + 1:])
+        target = relative_path.with_suffix(self.file_extension)
         return source, target
 
     def delete_resource_backup_by_name(self, resource_id, backup_name):

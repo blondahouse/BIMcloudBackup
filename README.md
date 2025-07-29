@@ -79,17 +79,20 @@ This tool is designed for **BIM Managers** and **IT Professionals** seeking to a
     REM Options: all, edited, selected
     SET TASK=all
     
-    REM Optional: Set PROJECT_PATH to an empty string if TASK is not selected
-    SET PROJECT_PATH=directory/filename
+    REM Optional: Set PROJECT_PATH to an empty string if TASK is not selected (else e.g. "0000_Template/YDZ-Template")
+    SET PROJECT_PATH=""
     
     REM Define the target root directory for copying backup files
     SET TARGET_ROOT=C:\path\to\target\directory
+   
+    REM Define Google Drive root folder id
+    SET GDRIVE_ROOT="your-google-drive-root-folder-id"
     
     REM Define the file extension for backups (depending on Archicad version)
     SET FILE_EXTENSION=".BIMProject26"
     
     REM Run the script with the defined arguments
-    %PYTHON_PATH% %SCRIPT_PATH% -m %MANAGER_URL% -c %CLIENT_ID% -u %USERNAME% -p %PASSWORD% -t %TASK% -prj %PROJECT_PATH% -tgt %TARGET_ROOT% -ext %FILE_EXTENSION%
+    %PYTHON_PATH% %SCRIPT_PATH% -m %MANAGER_URL% -c %CLIENT_ID% -u %USERNAME% -p %PASSWORD% -t %TASK% -prj %PROJECT_PATH% -tgt %TARGET_ROOT% -gdr %GDRIVE_ROOT% -ext %FILE_EXTENSION%
     
     REM pause
    ```
