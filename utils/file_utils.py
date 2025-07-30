@@ -1,5 +1,6 @@
 import shutil
 import os
+import time
 from pathlib import Path, PurePath
 from utils.logger import setup_logger
 from datetime import datetime, timezone
@@ -74,7 +75,14 @@ def copy_file(source_path, target_path):
         raise
 
 
-def upload_file_to_gdrive(source_path, drive_root_id, drive_relative_path, drive_api=None):
+def upload_file_to_gdrive(
+        source_path,
+        drive_root_id,
+        drive_relative_path,
+        drive_api=None,
+        max_attempts=3,
+        wait_seconds=30
+):
     """
     Upload a file to Google Drive, creating the necessary folder structure.
 
@@ -82,6 +90,8 @@ def upload_file_to_gdrive(source_path, drive_root_id, drive_relative_path, drive
     :param drive_root_id: Google Drive folder ID for the root of backups.
     :param drive_relative_path: Subfolder path in Google Drive (e.g. '2612_2_Tel_Aviv').
     :param drive_api: Optionally, a GoogleDriveAPI instance to reuse.
+    :param max_attempts: Attempts to upload the file to Google Drive.
+    :param wait_seconds: Waiting time between attempts.
     """
     try:
         source = Path(source_path)
@@ -103,8 +113,24 @@ def upload_file_to_gdrive(source_path, drive_root_id, drive_relative_path, drive
         logger.info(f"Google Drive folder '{drive_relative_path}' ready (ID: {folder_id})")
 
         # 2. Upload file to this folder, overwriting if exists
-        file_id = drive_api.upload_file(str(source), folder_id=folder_id, overwrite=True, drive_filename=drive_filename)
-        logger.info(f"Uploaded '{source}' to Google Drive folder '{drive_relative_path}' as file ID {file_id}")
+        for attempt in range(1, max_attempts + 1):
+            try:
+                file_id = drive_api.upload_file(
+                    str(source),
+                    folder_id=folder_id,
+                    overwrite=True,
+                    drive_filename=drive_filename
+                )
+                logger.info(f"Uploaded '{source}' to Google Drive folder '{drive_relative_path}' as file ID {file_id}")
+                break  # Success!
+            except Exception as e:
+                logger.error(f"Upload attempt {attempt} failed: {e}")
+                if attempt < max_attempts:
+                    logger.info(f"Retrying in {wait_seconds} seconds...")
+                    time.sleep(wait_seconds)
+                else:
+                    logger.error("Max upload attempts reached. Upload failed.")
+                    raise
 
     except Exception as e:
         logger.error(f"Error uploading file to Google Drive: {e}")
