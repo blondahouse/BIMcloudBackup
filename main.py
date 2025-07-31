@@ -33,7 +33,7 @@ def main():
     set_logger(args.client_id)
 
     # Initialize the API with your credentials and token
-    drive_api = GoogleDriveAPI(cred_path='credentials.json', token_path='token.json')
+    drive_api = GoogleDriveAPI()
 
     # Instantiate BackupManager with parsed arguments
     try:

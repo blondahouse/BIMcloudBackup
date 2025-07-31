@@ -1,6 +1,7 @@
 import shutil
 import os
 import time
+import traceback
 from pathlib import Path, PurePath
 from utils.logger import setup_logger
 from datetime import datetime, timezone
@@ -109,8 +110,16 @@ def upload_file_to_gdrive(
         drive_filename = rel_path.name
 
         # 1. Ensure the full folder chain exists, get final folder ID
-        folder_id = drive_api.get_or_create_folder(folder_path, drive_root_id)
-        logger.info(f"Google Drive folder '{drive_relative_path}' ready (ID: {folder_id})")
+        try:
+            logger.info(
+                f"Preparing to create/find folder. Full target path: '{folder_path}', drive_root_id: '{drive_root_id}'")
+            folder_id = drive_api.get_or_create_folder(folder_path, drive_root_id)
+            logger.info(f"Google Drive folder '{drive_relative_path}' ready (ID: {folder_id})")
+        except Exception as e:
+            logger.error(
+                f"Error during get_or_create_folder for path '{folder_path}' "
+                f"under root ID '{drive_root_id}': {e}\n{traceback.format_exc()}"
+            )
 
         # 2. Upload file to this folder, overwriting if exists
         for attempt in range(1, max_attempts + 1):

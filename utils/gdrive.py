@@ -10,10 +10,11 @@ SCOPES = ['https://www.googleapis.com/auth/drive']
 
 
 class GoogleDriveAPI:
-    def __init__(self, cred_path='credentials.json', token_path='token.json'):
+    def __init__(self, cred_path=None, token_path=None):
+        base_dir = Path(__file__).parent.parent
+        self.cred_path = str(cred_path or (base_dir / 'credentials.json'))
+        self.token_path = str(token_path or (base_dir / 'token.json'))
         self.creds = None
-        self.cred_path = cred_path
-        self.token_path = token_path
         self.service = self._authorize()
 
     def _authorize(self):
