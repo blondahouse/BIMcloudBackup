@@ -1,9 +1,11 @@
 import os
+import sys
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError
 from pathlib import Path, PurePath
 
 SCOPES = ['https://www.googleapis.com/auth/drive']
@@ -18,17 +20,41 @@ class GoogleDriveAPI:
         self.service = self._authorize()
 
     def _authorize(self):
+        """
+        Authorize Google Drive API. Raises exceptions for handling in main script.
+        """
+        creds = None
+
+        # Load token if exists
         if os.path.exists(self.token_path):
-            self.creds = Credentials.from_authorized_user_file(self.token_path, SCOPES)
-        if not self.creds or not self.creds.valid:
-            if self.creds and self.creds.expired and self.creds.refresh_token:
-                self.creds.refresh(Request())
-            else:
+            creds = Credentials.from_authorized_user_file(self.token_path, SCOPES)
+
+        # Refresh if possible
+        if creds and creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+            except RefreshError as e:
+                # Token invalid — remove it and decide how to handle in main
+                try:
+                    os.remove(self.token_path)
+                except OSError:
+                    pass
+                raise RuntimeError("GOOGLE_TOKEN_INVALID") from e
+
+        # First-time or after invalid token removal
+        if not creds or not creds.valid:
+            if sys.stdin.isatty():
                 flow = InstalledAppFlow.from_client_secrets_file(self.cred_path, SCOPES)
-                self.creds = flow.run_local_server(port=0)
-            with open(self.token_path, 'w') as token:
-                token.write(self.creds.to_json())
-        return build('drive', 'v3', credentials=self.creds)
+                creds = flow.run_local_server(port=0)
+            else:
+                raise RuntimeError("GOOGLE_AUTH_REQUIRED")  # No interactive mode
+
+        # Save credentials
+        with open(self.token_path, "w", encoding="utf-8") as token_file:
+            token_file.write(creds.to_json())
+
+        self.creds = creds
+        return build("drive", "v3", credentials=self.creds)
 
     def upload_file(self, file_path, folder_id=None, overwrite=True, drive_filename=None):
         filename = drive_filename if drive_filename else os.path.basename(file_path)
@@ -58,6 +84,7 @@ class GoogleDriveAPI:
     def get_or_create_folder(self, path, root_folder_id=None):
         parts = path.strip('/').split('/')
         parent_id = root_folder_id
+
         for part in parts:
             query = (
                 f"mimeType='application/vnd.google-apps.folder' "
@@ -65,14 +92,26 @@ class GoogleDriveAPI:
                 f"and name='{part}' "
                 f"and '{parent_id}' in parents"
             )
-            results = self.service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
-            files = results.get('files', [])
+            try:
+                results = self.service.files().list(
+                    q=query, spaces='drive', fields='files(id, name)'
+                ).execute()
+                files = results.get('files', [])
+            except Exception as e:
+                raise  # re-raise to propagate
+
             if files:
                 parent_id = files[0]['id']
             else:
                 metadata = {'name': part, 'mimeType': 'application/vnd.google-apps.folder'}
                 if parent_id:
                     metadata['parents'] = [parent_id]
-                folder = self.service.files().create(body=metadata, fields='id').execute()
-                parent_id = folder['id']
+                try:
+                    folder = self.service.files().create(
+                        body=metadata, fields='id'
+                    ).execute()
+                    parent_id = folder['id']
+                except Exception as e:
+                    raise
+
         return parent_id

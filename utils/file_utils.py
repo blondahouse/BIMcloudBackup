@@ -75,7 +75,6 @@ def copy_file(source_path, target_path):
         logger.error(f"Error copying file from {source_path} to {target_path}: {e}")
         raise
 
-
 def upload_file_to_gdrive(
         source_path,
         drive_root_id,
@@ -86,13 +85,7 @@ def upload_file_to_gdrive(
 ):
     """
     Upload a file to Google Drive, creating the necessary folder structure.
-
-    :param source_path: Full path to the source file.
-    :param drive_root_id: Google Drive folder ID for the root of backups.
-    :param drive_relative_path: Subfolder path in Google Drive (e.g. '2612_2_Tel_Aviv').
-    :param drive_api: Optionally, a GoogleDriveAPI instance to reuse.
-    :param max_attempts: Attempts to upload the file to Google Drive.
-    :param wait_seconds: Waiting time between attempts.
+    Retries both folder creation and upload.
     """
     try:
         source = Path(source_path)
@@ -109,20 +102,35 @@ def upload_file_to_gdrive(
         folder_path = str(rel_path.parent)
         drive_filename = rel_path.name
 
-        # 1. Ensure the full folder chain exists, get final folder ID
-        try:
+        for attempt in range(1, max_attempts + 1):
+            delay = wait_seconds * (2 ** (attempt - 1))
             logger.info(
-                f"Preparing to create/find folder. Full target path: '{folder_path}', drive_root_id: '{drive_root_id}'")
-            folder_id = drive_api.get_or_create_folder(folder_path, drive_root_id)
-            logger.info(f"Google Drive folder '{drive_relative_path}' ready (ID: {folder_id})")
-        except Exception as e:
-            logger.error(
-                f"Error during get_or_create_folder for path '{folder_path}' "
-                f"under root ID '{drive_root_id}': {e}\n{traceback.format_exc()}"
+                f"Upload attempt {attempt}/{max_attempts} "
+                f"for '{source}' → '{drive_relative_path}' (root={drive_root_id})"
             )
 
-        # 2. Upload file to this folder, overwriting if exists
-        for attempt in range(1, max_attempts + 1):
+            # 1) Ensure folder (with retry)
+            folder_id = None
+            try:
+                logger.info(
+                    f"Preparing to create/find folder. Full target path: '{folder_path}', "
+                    f"drive_root_id: '{drive_root_id}'"
+                )
+                folder_id = drive_api.get_or_create_folder(folder_path, drive_root_id)
+                logger.info(f"Google Drive folder '{drive_relative_path}' ready (ID: {folder_id})")
+            except Exception as e:
+                logger.error(
+                    f"get_or_create_folder failed on attempt {attempt}: {e}"
+                )
+                if attempt < max_attempts:
+                    logger.info(f"Retrying in {delay} seconds...")
+                    time.sleep(delay)
+                    continue
+                else:
+                    logger.error("Max attempts reached during folder creation. Aborting upload.")
+                    raise
+
+            # 2) Upload file (with retry)
             try:
                 file_id = drive_api.upload_file(
                     str(source),
@@ -130,13 +138,16 @@ def upload_file_to_gdrive(
                     overwrite=True,
                     drive_filename=drive_filename
                 )
-                logger.info(f"Uploaded '{source}' to Google Drive folder '{drive_relative_path}' as file ID {file_id}")
-                break  # Success!
+                logger.info(
+                    f"Uploaded '{source}' to Google Drive folder '{drive_relative_path}' "
+                    f"as file ID {file_id}"
+                )
+                return file_id  # Success!
             except Exception as e:
-                logger.error(f"Upload attempt {attempt} failed: {e}")
+                logger.error(f"Upload failed on attempt {attempt}: {e}")
                 if attempt < max_attempts:
-                    logger.info(f"Retrying in {wait_seconds} seconds...")
-                    time.sleep(wait_seconds)
+                    logger.info(f"Retrying in {delay} seconds...")
+                    time.sleep(delay)
                 else:
                     logger.error("Max upload attempts reached. Upload failed.")
                     raise

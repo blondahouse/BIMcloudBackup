@@ -32,8 +32,18 @@ def main():
     # Configure file_utils logger
     set_logger(args.client_id)
 
-    # Initialize the API with your credentials and token
-    drive_api = GoogleDriveAPI()
+    try:
+        drive_api = GoogleDriveAPI()
+    except RuntimeError as e:
+        if str(e) == "GOOGLE_TOKEN_INVALID":
+            logger.error("Google Drive token expired or revoked. Run the script manually to re-authenticate.")
+            sys.exit(1)
+        elif str(e) == "GOOGLE_AUTH_REQUIRED":
+            logger.error("Google Drive authorization required. Run manually to authorize and create token.json.")
+            sys.exit(1)
+        else:
+            logger.error(f"Unexpected authorization error: {e}")
+            sys.exit(1)
 
     # Instantiate BackupManager with parsed arguments
     try:
